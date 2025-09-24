@@ -33,6 +33,7 @@
 #include <RCSwitch.h>
 #include <Preferences.h>  // Thư viện Preferences
 #include "config.h"
+#include "vietnamese_dictionary.h"  // Hệ thống từ điển tiếng Việt
 #include "esp_sleep.h"       // Thư viện ESP sleep
 #include "driver/rtc_io.h"   // Thư viện cho RTC IO
 #include "esp_task_wdt.h"    // Thư viện Watchdog Timer
@@ -2629,6 +2630,13 @@ void setup() {
         // Khởi tạo RF433
         rfReceiver.enableReceive(RF_DATA_PIN);
         Serial.println("RF433 đã được khởi tạo");
+        
+        // Khởi tạo hệ thống từ điển tiếng Việt
+        if (vietnameseDictionary.begin()) {
+            Serial.println("Hệ thống từ điển tiếng Việt đã khởi tạo thành công");
+        } else {
+            Serial.println("Cảnh báo: Không thể khởi tạo từ điển tiếng Việt");
+        }
 
         // Cập nhật trạng thái GPS
         gpsPowerState = true;  // GPS luôn được cấp nguồn
@@ -2867,6 +2875,118 @@ void loop() {
 
                 sendSMSWithCooldown("Da cai dat lai bo loc Kalman ve tham so mac dinh.", SMS_ALERT_SYSTEM_ERROR);
                 Serial.println("Đã thiết lập lại bộ lọc Kalman về tham số mặc định");
+            }
+            // Xử lý các lệnh từ điển tiếng Việt
+            else if (smsData.indexOf("DICT STATS") >= 0) {
+                // Thống kê từ điển
+                String stats = "Tu dien: ";
+                stats += String(vietnameseDictionary.getTotalWords()) + " tu, ";
+                stats += String(vietnameseDictionary.getTotalCompoundWords()) + " tu ghep, ";
+                std::vector<String> deadWords = vietnameseDictionary.getDeadWords();
+                stats += String(deadWords.size()) + " tu chet";
+                sendSMSWithCooldown(stats.c_str(), SMS_ALERT_SYSTEM_ERROR);
+                Serial.println("Đã gửi thống kê từ điển");
+            }
+            else if (smsData.indexOf("DICT ADD") >= 0) {
+                // Thêm từ mới: DICT ADD [từ]:[nghĩa]
+                int colonPos = smsData.indexOf(":", smsData.indexOf("DICT ADD"));
+                if (colonPos > 0) {
+                    String word = smsData.substring(smsData.indexOf("DICT ADD") + 9, colonPos);
+                    String meaning = smsData.substring(colonPos + 1);
+                    word.trim();
+                    meaning.trim();
+                    
+                    if (vietnameseDictionary.addWord(word, meaning)) {
+                        String response = "Da them tu: " + word + " - " + meaning;
+                        sendSMSWithCooldown(response.c_str(), SMS_ALERT_SYSTEM_ERROR);
+                        Serial.println("Đã thêm từ mới qua SMS: " + word);
+                    } else {
+                        sendSMSWithCooldown("Loi: Khong the them tu moi.", SMS_ALERT_SYSTEM_ERROR);
+                    }
+                } else {
+                    sendSMSWithCooldown("Cu phap: DICT ADD [tu]:[nghia]", SMS_ALERT_SYSTEM_ERROR);
+                }
+            }
+            else if (smsData.indexOf("DICT COMPOUND") >= 0) {
+                // Thêm từ ghép: DICT COMPOUND [từ1] [từ2]:[nghĩa]
+                int spacePos = smsData.indexOf(" ", smsData.indexOf("DICT COMPOUND") + 14);
+                int colonPos = smsData.indexOf(":", spacePos);
+                if (spacePos > 0 && colonPos > 0) {
+                    String firstPart = smsData.substring(smsData.indexOf("DICT COMPOUND") + 14, spacePos);
+                    String secondPart = smsData.substring(spacePos + 1, colonPos);
+                    String meaning = smsData.substring(colonPos + 1);
+                    firstPart.trim();
+                    secondPart.trim();
+                    meaning.trim();
+                    
+                    if (vietnameseDictionary.addCompoundWord(firstPart, secondPart, meaning)) {
+                        String response = "Da them tu ghep: " + firstPart + " " + secondPart + " - " + meaning;
+                        sendSMSWithCooldown(response.c_str(), SMS_ALERT_SYSTEM_ERROR);
+                        Serial.println("Đã thêm từ ghép mới qua SMS");
+                    } else {
+                        sendSMSWithCooldown("Loi: Khong the them tu ghep.", SMS_ALERT_SYSTEM_ERROR);
+                    }
+                } else {
+                    sendSMSWithCooldown("Cu phap: DICT COMPOUND [tu1] [tu2]:[nghia]", SMS_ALERT_SYSTEM_ERROR);
+                }
+            }
+            else if (smsData.indexOf("DICT DEAD") >= 0) {
+                // Đánh dấu từ chết: DICT DEAD [từ]
+                String word = smsData.substring(smsData.indexOf("DICT DEAD") + 10);
+                word.trim();
+                
+                if (word.length() > 0) {
+                    if (vietnameseDictionary.markWordAsDead(word, "Danh dau qua SMS")) {
+                        String response = "Da danh dau tu chet: " + word;
+                        sendSMSWithCooldown(response.c_str(), SMS_ALERT_SYSTEM_ERROR);
+                        Serial.println("Đã đánh dấu từ chết qua SMS: " + word);
+                    } else {
+                        sendSMSWithCooldown("Loi: Khong tim thay tu hoac khong the danh dau.", SMS_ALERT_SYSTEM_ERROR);
+                    }
+                } else {
+                    sendSMSWithCooldown("Cu phap: DICT DEAD [tu]", SMS_ALERT_SYSTEM_ERROR);
+                }
+            }
+            else if (smsData.indexOf("DICT REVIVE") >= 0) {
+                // Khôi phục từ chết: DICT REVIVE [từ]
+                String word = smsData.substring(smsData.indexOf("DICT REVIVE") + 12);
+                word.trim();
+                
+                if (word.length() > 0) {
+                    if (vietnameseDictionary.reviveWord(word)) {
+                        String response = "Da khoi phuc tu: " + word;
+                        sendSMSWithCooldown(response.c_str(), SMS_ALERT_SYSTEM_ERROR);
+                        Serial.println("Đã khôi phục từ qua SMS: " + word);
+                    } else {
+                        sendSMSWithCooldown("Loi: Khong tim thay tu chet hoac khong the khoi phuc.", SMS_ALERT_SYSTEM_ERROR);
+                    }
+                } else {
+                    sendSMSWithCooldown("Cu phap: DICT REVIVE [tu]", SMS_ALERT_SYSTEM_ERROR);
+                }
+            }
+            else if (smsData.indexOf("DICT SEARCH") >= 0) {
+                // Tìm kiếm từ: DICT SEARCH [pattern]
+                String pattern = smsData.substring(smsData.indexOf("DICT SEARCH") + 12);
+                pattern.trim();
+                
+                if (pattern.length() > 0) {
+                    std::vector<String> results = vietnameseDictionary.searchWords(pattern);
+                    String response = "Tim thay " + String(results.size()) + " tu: ";
+                    for (size_t i = 0; i < min((size_t)5, results.size()); i++) {
+                        if (i > 0) response += ", ";
+                        response += results[i];
+                    }
+                    if (results.size() > 5) response += "...";
+                    sendSMSWithCooldown(response.c_str(), SMS_ALERT_SYSTEM_ERROR);
+                } else {
+                    sendSMSWithCooldown("Cu phap: DICT SEARCH [pattern]", SMS_ALERT_SYSTEM_ERROR);
+                }
+            }
+            else if (smsData.indexOf("DICT CLEANUP") >= 0) {
+                // Dọn dẹp từ chết
+                vietnameseDictionary.cleanupDeadWords();
+                sendSMSWithCooldown("Da don dep cac tu chet khong su dung.", SMS_ALERT_SYSTEM_ERROR);
+                Serial.println("Đã dọn dẹp từ chết qua SMS");
             }
         }
     }
