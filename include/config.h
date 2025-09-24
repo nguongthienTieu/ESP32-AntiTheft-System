@@ -117,6 +117,24 @@ enum SMSAlertType {
     SMS_ALERT_SYSTEM_ERROR = 6  // Lỗi hệ thống
 };
 
+// Cấu hình hệ thống từ điển tiếng Việt
+#define DICT_ENABLE_COMPOUND_WORDS true    // Bật hỗ trợ từ ghép
+#define DICT_ENABLE_DEAD_WORDS true        // Bật quản lý từ chết
+#define DICT_ENABLE_SMS_COMMANDS true      // Bật lệnh SMS cho từ điển
+#define DICT_MAX_WORDS 1000                // Tối đa số từ (tuỳ theo RAM)
+#define DICT_MAX_COMPOUND_WORDS 500        // Tối đa từ ghép
+#define DICT_DEAD_WORD_TIMEOUT 86400000    // 24h timeout cho từ chết
+#define DICT_AUTO_CLEANUP_INTERVAL 86400000 // Dọn dẹp tự động mỗi 24h
+
+// Mã SMS cho từ điển
+#define SMS_DICT_STATS_CODE "DICT STATS"
+#define SMS_DICT_ADD_CODE "DICT ADD"
+#define SMS_DICT_COMPOUND_CODE "DICT COMPOUND"
+#define SMS_DICT_DEAD_CODE "DICT DEAD"
+#define SMS_DICT_REVIVE_CODE "DICT REVIVE"
+#define SMS_DICT_SEARCH_CODE "DICT SEARCH"
+#define SMS_DICT_CLEANUP_CODE "DICT CLEANUP"
+
 // Biến toàn cục để lưu trạng thái hiện tại
 extern ErrorState currentError;
 
